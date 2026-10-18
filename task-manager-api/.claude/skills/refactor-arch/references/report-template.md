@@ -12,6 +12,8 @@ O relatório é impresso no terminal **e** é Markdown válido (pode ser salvo e
 - **Recommendation:** ação concreta + ID da transformação do playbook (`T-xx`).
 - **Summary:** contagens precisam bater com o número de findings listados.
 - **Deprecated APIs:** a seção é obrigatória; se não houver, escreva "Nenhuma API deprecated detectada" e o que foi verificado.
+- **Administrative Operations:** seção obrigatória — tabela com cada operação administrativa, a proteção atual e a proteção que a Fase 3 aplicará. Se não houver nenhuma, escreva "Nenhuma operação administrativa".
+- **Proposed Contract Changes:** liste cada rota que passará a exigir credencial (e qual). Toda recomendação de AP-04/AP-12 deve corresponder a um item aqui.
 - Mínimo esperado: ≥ 5 findings com pelo menos 1 CRITICAL ou HIGH (se o projeto realmente tiver menos problemas, explique).
 
 ## Estrutura
@@ -47,6 +49,11 @@ Recommendation: <ação concreta> — Playbook T-xx
 | Location | Deprecated usage | Modern replacement |
 |----------|------------------|--------------------|
 | <arquivo:linha> | <api> | <substituto> |
+
+## Administrative Operations
+| Endpoint | Operação | Proteção atual | Proteção após Fase 3 |
+|----------|----------|----------------|----------------------|
+| <método rota> | <o que faz> | <nenhuma / token não verificado / ...> | <Bearer + admin / X-Admin-Token / dono ou admin> |
 
 ## Architecture Overview
 Current: <classificação da Fase 1 + principais violações de camadas>

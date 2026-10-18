@@ -145,9 +145,17 @@ grep -rnE "^\s*global |^(let|var) [a-zA-Z_]+ = (\{|\[|0)|check_same_thread=False
 **Por que importa:** o debugger do Werkzeug permite execução remota de código; stack traces vazam internals.
 
 ### AP-12 — Autenticação falsa ou ausente
-**Sinais:** tokens previsíveis (`'fake-jwt-token-' + id`), login que não emite credencial verificável, rotas `admin`/relatórios financeiros/deleção sem qualquer verificação de identidade.
-**Por que importa:** qualquer cliente se passa por qualquer usuário ou acessa operações administrativas.
-**Nota:** se implementar autenticação completa estiver fora do escopo (quebraria o contrato), registre como recomendação e aplique o mínimo seguro (ex.: token assinado; proteger endpoints destrutivos).
+**Sinais:**
+- Tokens previsíveis (`'fake-jwt-token-' + id`) ou login que não emite credencial verificável.
+- Token emitido (mesmo assinado) que **nenhum** middleware/decorator verifica.
+- **Operações administrativas** acessíveis sem credencial: deleção de usuários/contas, alteração de privilégio (`role`, `is_admin`, `active`), criação de conta com perfil privilegiado, alteração de e-mail/senha de **outro** usuário, reset/limpeza em massa, relatórios financeiros/administrativos.
+- Credencial administrativa conhecida publicamente (ex.: seed criando `admin` com senha fixa no código).
+```bash
+grep -rnE "\.(delete|put|patch)\(|methods=\[.?'(DELETE|PUT|PATCH)" --include=*.py --include=*.js . | grep -v node_modules   # inventário de rotas de escrita
+grep -rnE "require_auth|require_admin|requireAdmin|verify|Authorization|X-Admin-Token" --include=*.py --include=*.js . | grep -v node_modules   # existe verificação?
+```
+**Por que importa:** qualquer cliente se passa por qualquer usuário ou executa operações administrativas.
+**Mínimo seguro (obrigatório na Fase 3 — ver T-06):** todo finding AP-12 só é considerado resolvido quando **(a)** a credencial emitida é verificada no servidor e **(b)** todas as operações administrativas listadas acima exigem credencial válida **e** perfil autorizado, em modo *fail-closed*. Assinar o token sem verificá-lo **não** resolve o finding. Autenticação de rotas comuns (leituras, CRUD do próprio usuário) pode ficar como recomendação se quebrar o contrato.
 
 ---
 

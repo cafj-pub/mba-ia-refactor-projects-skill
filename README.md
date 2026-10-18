@@ -8,7 +8,7 @@ A skill `refactor-arch` (Claude Code) analisa uma codebase de backend, audita-a 
 |---|---|
 | Skill (idêntica nos 3 projetos) | `*/.claude/skills/refactor-arch/` |
 | Código refatorado | `code-smells-project/`, `ecommerce-api-legacy/`, `task-manager-api/` |
-| Relatórios de auditoria (Fases 1 e 2) | [reports/audit-project-1.md](reports/audit-project-1.md), [reports/audit-project-2.md](reports/audit-project-2.md), [reports/audit-project-3.md](reports/audit-project-3.md) |
+| Relatórios de auditoria (Fases 1 e 2) | [reports/audit-project-1.md](reports/audit-project-1.md), [reports/audit-project-2.md](reports/audit-project-2.md), [reports/audit-project-3.md](reports/audit-project-3.md) (+ 2ª execução: [audit-project-3-rerun.md](reports/audit-project-3-rerun.md)) |
 
 ---
 
@@ -132,6 +132,7 @@ Cada entrada traz **sinais de detecção concretos** (padrões de grep por stack
 | O Projeto 3 tinha bancos existentes com hash MD5: trocar o algoritmo invalidaria as contas | Playbook T-04 ganhou a **migração transparente**: o hash legado é verificado uma vez e regravado com scrypt |
 | Endpoints que passam a exigir token quebrariam a comparação com a baseline | Incluir o header já no spec da baseline (a versão original ignora headers extras) |
 | No zsh, `-H $VAR` não é dividido em palavras e o curl enviou requisições sem `Content-Type` | Nota no `validation.md`: passar headers literalmente |
+| **Feedback da avaliação:** no P3 o relatório marcou a autenticação falsa como HIGH, mas a Fase 3 só assinou o token. Nada o verificava e `DELETE /users` e a troca de `role` continuavam abertos, enquanto no P2 a mesma skill protegeu as rotas destrutivas. A causa: a nota do AP-12 trazia "token assinado" como **exemplo** de mínimo seguro, e o T-06 só mostrava a emissão do token | T-06 ganhou o **mínimo seguro obrigatório** (credencial verificada no servidor **e** todas as operações administrativas protegidas, *fail-closed*, com a lista do que não conta como correção). A Fase 3 proíbe deixar AP-04/AP-12 como recomendação. A Fase 2 ganhou a seção "Administrative Operations". A validação exige testes negativos 401/403. A skill rodou de novo no P3 (ver abaixo) |
 
 ---
 
@@ -217,7 +218,8 @@ utils/helpers (quase tudo sem uso)      utils/ constants, validators, errors, ti
 | Error handling centralizado | ✅ | ✅ | ✅ |
 | Entry point claro | ✅ `app.py` | ✅ `src/server.js` | ✅ `app.py` |
 | Aplicação inicia sem erros | ✅ | ✅ | ✅ |
-| Endpoints originais respondem corretamente | ✅ 34/38 (+4 intencionais) | ✅ 7/10 (+3 intencionais) | ✅ 40/44 (+4 intencionais) |
+| Endpoints originais respondem corretamente | ✅ 34/38 (+4 intencionais) | ✅ 7/10 (+3 intencionais) | ✅ 40/44 (+4 intencionais); 2ª execução 39/39 |
+| Operações administrativas exigem credencial (critério do T-06 reforçado) | ⚠️ `/admin/reset-db` protegido; `GET /relatorios/vendas` (financeiro) ainda aberto — pendente de nova execução | ✅ `X-Admin-Token` | ✅ Bearer + admin (2ª execução, 22/22 testes negativos) |
 
 ### Logs da validação (aplicações rodando após a refatoração)
 
@@ -301,6 +303,30 @@ Seed concluído com sucesso!   (executado com -W error::DeprecationWarning)
 Testes adicionais: login com banco legado (hash MD5) → 200 e hash migrado para `scrypt`; `priority` string → 400 (antes 500); `/tasks/search?priority=abc` → 400 (antes 500); `PUT /categories/1` sem corpo → 400 (antes 500).
 </details>
 
+<details>
+<summary><b>Projeto 3 — 2ª execução</b> (após reforço do T-06): 39/39 idênticos à baseline com token de admin; 22/22 testes negativos de autorização</summary>
+
+Relatório: [audit-project-3-rerun.md](reports/audit-project-3-rerun.md) — 3 HIGH (operações administrativas abertas, token nunca verificado, senha fixa do admin no seed) e 1 MEDIUM (validação de `name`/`active`). A Fase 3 criou `middlewares/auth.py` (`require_auth`, `require_admin`, usuário recarregado do banco a cada requisição), `TokenService.verify` com expiração, regras "dono ou admin" e "`role`/`active` só admin" no controller, e o seed com `SEED_ADMIN_PASSWORD` ou senha aleatória.
+
+```
+401 DELETE /users/3   sem token · token inválido · token adulterado · esquema "Token"
+403 DELETE /users/3   token de user · token de manager        → GET /users/3 continua 200
+401 PUT    /users/1   sem token
+403 PUT    /users/1   maria altera e-mail/senha do joao        → joao inalterado
+403 PUT    /users/2   auto-promoção a admin · user altera active · manager promove
+                                                               → maria continua role=user, active=true
+200 PUT    /users/2   maria edita a própria conta
+400 PUT    /users/2   nome vazio · active "false" (string)
+401 POST   /users     role=admin sem token · token inválido
+403 POST   /users     role=admin com token de user
+201 POST   /users     cadastro público com perfil padrão
+401 PUT    /users/2   token de usuária desativada pelo admin
+200 DELETE /users/3   admin
+token expirado → 401 · token assinado com outra SECRET_KEY → 401
+seed sem SEED_ADMIN_PASSWORD → admin com senha aleatória (senha antiga → 401)
+```
+</details>
+
 Re-auditoria pós-refatoração (greps de AP-01, 02, 04, 05, 08, 11, 17, 18 nas 3 bases): nenhuma ocorrência real. Restaram apenas falsos positivos justificados, como o uso de MD5 exclusivamente para verificar e migrar hashes legados e o `print` no script CLI `seed.py`.
 
 ### Observações sobre o comportamento em stacks diferentes
@@ -312,7 +338,8 @@ Re-auditoria pós-refatoração (greps de AP-01, 02, 04, 05, 08, 11, 17, 18 nas 
 
 ### Recomendações que ficaram fora do escopo (registradas pela skill)
 
-- P1/P3: autenticação real (exigir token nas rotas) mudaria o contrato público, por isso ficou como recomendação. No P3 o token agora é assinado e verificável.
+- P3: as operações administrativas exigem token (2ª execução). Autenticação nas **leituras** e no CRUD de tasks/categorias mudaria o contrato de todos os clientes, por isso ficou como recomendação.
+- P1: pelo critério reforçado, `GET /relatorios/vendas` (relatório financeiro) deveria exigir credencial — requer nova execução da skill no P1.
 - P1: cancelar um pedido não devolve o estoque (comportamento original preservado; decisão de negócio).
 - P3: a senha mínima de 4 caracteres foi mantida (os seeds dependem dela) e virou constante nomeada; recomenda-se aumentar.
 
@@ -362,9 +389,12 @@ curl -X POST localhost:3000/api/checkout -H 'Content-Type: application/json' \
 curl localhost:3000/api/admin/financial-report -H 'X-Admin-Token: dev-token'
 
 # Projeto 3 — http://localhost:5000
-cd task-manager-api && pip install -r requirements.txt && python seed.py && python app.py
+cd task-manager-api && pip install -r requirements.txt
+export SEED_ADMIN_PASSWORD='uma-senha-forte' && python seed.py && python app.py
 curl localhost:5000/tasks
-curl -X POST localhost:5000/login -H 'Content-Type: application/json' -d '{"email":"joao@email.com","password":"<senha do seed.py>"}'
+curl -X POST localhost:5000/login -H 'Content-Type: application/json' -d "{\"email\":\"joao@email.com\",\"password\":\"$SEED_ADMIN_PASSWORD\"}"
+# use o token devolvido nas rotas administrativas:
+curl -X DELETE localhost:5000/users/3 -H "Authorization: Bearer <token>"
 ```
 
 > No macOS, se a porta 5000 estiver ocupada pelo AirPlay, use `PORT=5050 python app.py`.

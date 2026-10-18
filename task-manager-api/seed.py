@@ -1,5 +1,7 @@
 """Script para popular o banco com dados iniciais"""
-from app import app
+import secrets
+
+from app import app, settings
 from database import db
 from models.task import Task
 from models.user import User
@@ -19,8 +21,12 @@ def seed_data():
         u1 = User()
         u1.name = 'João Silva'
         u1.email = 'joao@email.com'
-        u1.set_password('1234')
+        # A senha do admin nunca é fixa: vem do ambiente ou é aleatória.
+        admin_password = settings.seed_admin_password or secrets.token_urlsafe(16)
+        u1.set_password(admin_password)
         u1.role = 'admin'
+        if not settings.seed_admin_password:
+            print("SEED_ADMIN_PASSWORD não definida: admin criado com senha aleatória (defina a variável para usar o admin)")
         db.session.add(u1)
 
         u2 = User()

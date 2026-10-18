@@ -4,11 +4,20 @@ from database import db
 from models import stats
 from models.task import Task
 from models.user import User
-from utils.constants import DEFAULT_ROLE, MIN_PASSWORD_LENGTH
+from utils.constants import DEFAULT_ROLE, MIN_PASSWORD_LENGTH, PRIVILEGED_USER_FIELDS
 from utils.errors import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
-from utils.validators import require_json, validate_email, validate_password, validate_role
+from utils.validators import (
+    require_json, validate_bool, validate_email, validate_name, validate_password, validate_role,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _require_admin_actor(actor, message):
+    if actor is None:
+        raise UnauthorizedError('Token de autenticação ausente ou inválido')
+    if not actor.is_admin():
+        raise ForbiddenError(message)
 
 
 def get_user_or_404(user_id):
@@ -41,7 +50,7 @@ class UserController:
         data['tasks'] = [task.to_dict() for task in Task.query.filter_by(user_id=user_id).all()]
         return data
 
-    def create_user(self, data):
+    def create_user(self, data, actor=None):
         require_json(data)
         name, email, password = data.get('name'), data.get('email'), data.get('password')
         role = data.get('role', DEFAULT_ROLE)
@@ -56,6 +65,8 @@ class UserController:
         validate_password(password, f'Senha deve ter no mínimo {MIN_PASSWORD_LENGTH} caracteres')
         _ensure_email_available(email)
         validate_role(role)
+        if role != DEFAULT_ROLE:
+            _require_admin_actor(actor, 'Apenas administradores podem criar usuários com este perfil')
 
         user = User(name=name, email=email, role=role)
         user.set_password(password)
@@ -64,12 +75,17 @@ class UserController:
         logger.info('Usuário criado: %s', user.id)
         return user.to_dict()
 
-    def update_user(self, user_id, data):
+    def update_user(self, user_id, data, actor):
+        # Só o próprio usuário ou um admin altera a conta; perfil e status, só admin.
+        if actor.id != user_id and not actor.is_admin():
+            raise ForbiddenError('Acesso negado')
         user = get_user_or_404(user_id)
         require_json(data)
+        if PRIVILEGED_USER_FIELDS & data.keys():
+            _require_admin_actor(actor, 'Apenas administradores podem alterar perfil ou status')
 
         if 'name' in data:
-            user.name = data['name']
+            user.name = validate_name(data['name'])
         if 'email' in data:
             validate_email(data['email'])
             _ensure_email_available(data['email'], current_user_id=user_id)
@@ -79,7 +95,7 @@ class UserController:
         if 'role' in data:
             user.role = validate_role(data['role'])
         if 'active' in data:
-            user.active = data['active']
+            user.active = validate_bool(data['active'], 'Campo active deve ser booleano')
 
         db.session.commit()
         return user.to_dict()

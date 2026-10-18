@@ -9,7 +9,9 @@ from controllers.report_controller import ReportController
 from controllers.task_controller import TaskController
 from controllers.user_controller import UserController
 from database import db
+from middlewares.auth import Auth
 from middlewares.error_handler import register_error_handlers
+from models.user import User
 from routes.category_routes import create_category_blueprint
 from routes.report_routes import create_report_blueprint
 from routes.system_routes import create_system_blueprint
@@ -36,11 +38,12 @@ def create_app(settings=None):
     notification_service = NotificationService(
         settings.smtp_host, settings.smtp_port, settings.smtp_user, settings.smtp_password
     )
-    token_service = TokenService(settings.secret_key)
+    token_service = TokenService(settings.secret_key, settings.token_max_age_seconds)
+    auth = Auth(token_service, load_user=lambda user_id: db.session.get(User, user_id))
 
     app.register_blueprint(create_system_blueprint(settings.api_version))
     app.register_blueprint(create_task_blueprint(TaskController(notification_service)))
-    app.register_blueprint(create_user_blueprint(UserController(token_service)))
+    app.register_blueprint(create_user_blueprint(UserController(token_service), auth))
     app.register_blueprint(create_report_blueprint(ReportController()))
     app.register_blueprint(create_category_blueprint(CategoryController()))
     register_error_handlers(app)

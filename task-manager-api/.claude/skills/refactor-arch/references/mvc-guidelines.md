@@ -100,7 +100,8 @@ Preserve, para cada endpoint do inventário da Fase 1:
 **Mudanças de contrato permitidas** (devem estar listadas em "Proposed Contract Changes" do relatório e em "Intentional Contract Changes" no resumo final):
 - remover campos sensíveis das respostas (senha, hash, segredo, config interna);
 - remover endpoints que executam código/SQL arbitrário;
-- exigir credencial (token de admin via env) em endpoints destrutivos em massa;
+- exigir credencial e perfil autorizado em **operações administrativas** (deleção de contas, mudança de `role`/`active`, criação de conta privilegiada, alteração de dados de acesso de outro usuário, reset, relatórios financeiros) — obrigatório quando houver finding AP-04/AP-12 (ver T-06);
+- substituir a senha fixa de contas administrativas criadas por seed por valor vindo do ambiente ou aleatório;
 - trocar mensagens de erro internas (`str(e)`) por mensagens genéricas;
 - passar a responder `404` onde antes um recurso inexistente era tratado como sucesso, ou `400` onde antes uma entrada inválida gerava `500`;
 - corrigir integridade (ex.: deleção em cascata em vez de deixar órfãos).
@@ -124,6 +125,7 @@ Qualquer outra mudança de contrato é proibida.
 - [ ] Views/Routes apenas roteiam e serializam
 - [ ] Controllers concentram o fluxo da aplicação
 - [ ] Error handling centralizado
+- [ ] Operações administrativas exigem credencial verificada (401/403 testados)
 - [ ] Entry point claro
 - [ ] Aplicação inicia sem erros
 - [ ] Endpoints originais respondem corretamente (comparados à baseline)

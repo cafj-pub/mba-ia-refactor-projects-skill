@@ -53,10 +53,26 @@ def call(base, method, path, body=None, headers=None):
         payload = raw
     return {"method": method, "path": path, "status": status, "body": payload}
 
+def render(headers, variables):
+    out = {}
+    for key, value in (headers or {}).items():
+        for name, var in variables.items():
+            value = value.replace("{{" + name + "}}", str(var))
+        out[key] = value
+    return out
+
 if __name__ == "__main__":
     base, spec_file, out_file = sys.argv[1:4]
-    spec = json.load(open(spec_file))   # [{"method": "GET", "path": "/x", "body": {...}, "headers": {...}}]
-    results = [call(base, s["method"], s["path"], s.get("body"), s.get("headers")) for s in spec]
+    # [{"method": "POST", "path": "/login", "body": {...}, "capture": {"admin_token": "token"}},
+    #  {"method": "DELETE", "path": "/users/3", "headers": {"Authorization": "Bearer {{admin_token}}"}}]
+    spec = json.load(open(spec_file))
+    variables, results = {}, []
+    for s in spec:
+        result = call(base, s["method"], s["path"], s.get("body"), render(s.get("headers"), variables))
+        for name, field in s.get("capture", {}).items():
+            if isinstance(result["body"], dict):
+                variables[name] = result["body"].get(field, "")
+        results.append(result)
     json.dump(results, open(out_file, "w"), indent=2, ensure_ascii=False)
     for r in results:
         print(f'{r["status"]}  {r["method"]:6} {r["path"]}')
@@ -72,8 +88,14 @@ if __name__ == "__main__":
    - mesma quantidade de itens em listagens (se a ordem original era não determinística — ex.: callbacks concorrentes — compare como conjunto e registre a ordenação determinística como mudança intencional);
    - para endpoints de cálculo (relatórios, totais), **valores** iguais aos da baseline.
    Diferenças só são aceitas se estiverem em "Intentional Contract Changes" — liste cada uma explicitamente.
-4. **Re-auditoria:** rode novamente os greps do catálogo para AP-01, AP-02, AP-04, AP-05, AP-06, AP-08 e confira que não restaram ocorrências na nova base (ignorando `.env.example`, testes e a pasta `.claude/`).
-5. **Limpeza:** derrube os processos iniciados (`kill <pid>`), remova bancos temporários e `__pycache__` gerados pela validação.
+4. **Autorização (obrigatório se houver finding AP-04/AP-12):** para **cada** operação administrativa do relatório, execute e registre:
+   - sem credencial → `401` (ou `403` no modelo `X-Admin-Token`);
+   - credencial inválida/expirada/adulterada → `401`/`403`;
+   - credencial válida de usuário **sem** permissão (ex.: perfil `user`) → `403`, e confirme que o dado **não** mudou;
+   - credencial de admin → mesmo status da baseline.
+   Se o spec precisa de um token, capture-o de uma resposta anterior (ex.: login do admin) com `"capture"` e use `{{var}}` nos headers; a versão original ignora o header, então o mesmo spec serve para baseline e pós-refatoração.
+5. **Re-auditoria:** rode novamente os greps do catálogo para AP-01, AP-02, AP-04, AP-05, AP-06, AP-08 e confira que não restaram ocorrências na nova base (ignorando `.env.example`, testes e a pasta `.claude/`).
+6. **Limpeza:** derrube os processos iniciados (`kill <pid>`), remova bancos temporários e `__pycache__` gerados pela validação.
 
 Comparação sugerida (Python):
 

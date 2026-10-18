@@ -24,6 +24,8 @@ ROLE_MANAGER = 'manager'
 VALID_ROLES = [ROLE_USER, ROLE_ADMIN, ROLE_MANAGER]
 DEFAULT_ROLE = ROLE_USER
 MIN_PASSWORD_LENGTH = 4
+# Campos de usuário que só um admin pode alterar.
+PRIVILEGED_USER_FIELDS = frozenset({'role', 'active'})
 
 DEFAULT_COLOR = '#000000'
 

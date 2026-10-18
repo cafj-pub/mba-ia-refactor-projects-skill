@@ -70,6 +70,18 @@ def validate_password(password, message):
     return password
 
 
+def validate_name(name):
+    if not isinstance(name, str) or not name.strip():
+        raise ValidationError('Nome inválido')
+    return name
+
+
+def validate_bool(value, message):
+    if not isinstance(value, bool):
+        raise ValidationError(message)
+    return value
+
+
 def validate_role(role):
     if role not in VALID_ROLES:
         raise ValidationError('Role inválido')

@@ -14,9 +14,25 @@ A aplicação sobe em `http://localhost:5000` (configurável via `PORT`). O `see
 
 > Bancos criados pela versão anterior continuam funcionando: senhas com hash MD5 legado são migradas para o hash atual no primeiro login bem-sucedido.
 
+## Autenticação
+
+`POST /login` devolve um `token` assinado (expira em `TOKEN_MAX_AGE_SECONDS`). Envie-o como `Authorization: Bearer <token>` nas operações protegidas:
+
+| Rota | Quem pode |
+|---|---|
+| `DELETE /users/<id>` | admin |
+| `PUT /users/<id>` | o próprio usuário ou admin; `role` e `active` só admin |
+| `POST /users` com `role` diferente de `user` | admin (cadastro com perfil padrão é público) |
+
+Sem token ou com token inválido/expirado → `401`; sem permissão → `403`. O admin do seed (`joao@email.com`) usa a senha definida em `SEED_ADMIN_PASSWORD` — sem ela, a senha é aleatória:
+
+```bash
+SEED_ADMIN_PASSWORD='uma-senha-forte' python seed.py
+```
+
 ## Configuração
 
-Variáveis de ambiente (ou arquivo `.env`) — veja [.env.example](.env.example): `SECRET_KEY`, `DATABASE_URL`, `FLASK_DEBUG`, `HOST`, `PORT`, `CORS_ORIGINS`, `LOG_LEVEL` e `SMTP_*` (notificação de task atribuída; desabilitada se vazio).
+Variáveis de ambiente (ou arquivo `.env`) — veja [.env.example](.env.example): `SECRET_KEY`, `DATABASE_URL`, `FLASK_DEBUG`, `HOST`, `PORT`, `CORS_ORIGINS`, `LOG_LEVEL`, `TOKEN_MAX_AGE_SECONDS`, `SEED_ADMIN_PASSWORD` e `SMTP_*` (notificação de task atribuída; desabilitada se vazio).
 
 ## Estrutura
 

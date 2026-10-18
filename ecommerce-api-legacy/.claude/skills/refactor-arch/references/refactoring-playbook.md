@@ -215,7 +215,106 @@ def require_admin_token(settings):
         return wrapper
     return decorator
 ```
-Token falso (`'fake-jwt-token-' + id`) → token **assinado** (ex.: `itsdangerous.URLSafeTimedSerializer(SECRET_KEY).dumps({"user_id": id})`, `jsonwebtoken` no Node), mantendo a chave `token` na resposta.
+### Mínimo seguro obrigatório (AP-04 / AP-12)
+
+Um finding AP-12 só está resolvido quando as duas condições valem:
+1. **Toda credencial emitida é verificada** no servidor (assinatura + expiração) por um middleware/decorator; o usuário é recarregado do banco (perfil e `active` atuais, nunca confiar no `role` gravado no token).
+2. **Toda operação administrativa exige credencial + autorização**, em modo *fail-closed*: deleção de usuários/contas, alteração de privilégio (`role`/`active`), criação de conta privilegiada, alteração de dados de acesso de **outro** usuário, reset/limpeza em massa, relatórios financeiros/administrativos.
+
+Escolha o mecanismo pelo que o projeto já tem:
+
+| Situação do projeto | Mecanismo mínimo |
+|---|---|
+| Tem login que devolve token (mesmo falso) | Emitir token **assinado** com expiração + `require_auth` / `require_admin` verificando `Authorization: Bearer <token>` |
+| Não tem login | Header `X-Admin-Token` comparado (tempo constante) com `ADMIN_TOKEN` do ambiente; sem `ADMIN_TOKEN` configurado → rota bloqueada (exemplo acima) |
+
+Respostas: sem credencial ou credencial inválida/expirada → **401**; credencial válida sem permissão → **403**.
+
+**Não conta como correção:** assinar o token sem verificá-lo; verificar só em algumas das rotas administrativas; fallback que libera a rota quando o segredo não está configurado; checar o `role` enviado no corpo da requisição ou guardado no token sem recarregar o usuário.
+
+**Antes**
+```python
+return jsonify({'token': 'fake-jwt-token-' + str(user.id)})
+
+@user_bp.route('/users/<int:user_id>', methods=['DELETE'])
+def delete_user(user_id): ...          # qualquer cliente apaga qualquer usuário
+
+@user_bp.route('/users/<int:user_id>', methods=['PUT'])
+def update_user(user_id): ...          # qualquer cliente vira admin enviando {"role": "admin"}
+```
+**Depois — emissão e verificação (services/token_service.py)**
+```python
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+class TokenService:
+    def __init__(self, secret_key, max_age_seconds):
+        self._serializer = URLSafeTimedSerializer(secret_key, salt='auth-token')
+        self._max_age = max_age_seconds
+
+    def issue(self, user):
+        return self._serializer.dumps({'user_id': user.id})
+
+    def verify(self, token):
+        try:
+            return self._serializer.loads(token, max_age=self._max_age)['user_id']
+        except (BadSignature, SignatureExpired, KeyError, TypeError):
+            raise UnauthorizedError('Token de autenticação ausente ou inválido')
+```
+**Depois — middleware (middlewares/auth.py)**
+```python
+def create_auth(token_service, load_user):
+    def _authenticate():
+        header = request.headers.get('Authorization', '')
+        scheme, _, token = header.partition(' ')
+        if scheme.lower() != 'bearer' or not token:
+            raise UnauthorizedError('Token de autenticação ausente ou inválido')
+        user = load_user(token_service.verify(token))
+        if not user or not user.active:
+            raise UnauthorizedError('Token de autenticação ausente ou inválido')
+        g.current_user = user
+        return user
+
+    def require_auth(view):
+        @functools.wraps(view)
+        def wrapper(*args, **kwargs):
+            _authenticate()
+            return view(*args, **kwargs)
+        return wrapper
+
+    def require_admin(view):
+        @functools.wraps(view)
+        def wrapper(*args, **kwargs):
+            if not _authenticate().is_admin():
+                raise ForbiddenError('Acesso negado')
+            return view(*args, **kwargs)
+        return wrapper
+
+    return require_auth, require_admin
+```
+**Depois — rotas e regras de autorização**
+```python
+# View: autenticação na rota
+@user_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@require_admin
+def delete_user(user_id): ...
+
+@user_bp.route('/users/<int:user_id>', methods=['PUT'])
+@require_auth
+def update_user(user_id):
+    return jsonify(controller.update_user(user_id, request.get_json(silent=True), actor=g.current_user))
+
+# Controller: regra de autorização que depende do dado (dono x admin, campos privilegiados)
+def update_user(self, user_id, data, actor):
+    if actor.id != user_id and not actor.is_admin():
+        raise ForbiddenError('Acesso negado')
+    if PRIVILEGED_FIELDS & data.keys() and not actor.is_admin():
+        raise ForbiddenError('Apenas administradores podem alterar perfil ou status')
+```
+**Node (Express)** — mesmo padrão: `jsonwebtoken.verify(token, secret)` (ou `X-Admin-Token`, ver `requireAdminToken` acima) num middleware aplicado às rotas administrativas: `router.delete('/api/users/:id', requireAdmin, handler)`.
+
+**Credencial administrativa do seed:** se o seed cria um admin, a senha vem do ambiente (`SEED_ADMIN_PASSWORD`) ou é aleatória — nunca fixa no código, senão a proteção acima é inútil.
+
+**Ajuste no cliente de exemplo e na validação:** atualize `api.http`/README com o header e inclua no spec de validação os testes negativos (ver `validation.md` § Autorização).
 
 ## T-07 — Extrair regra de negócio para controllers (views finas)
 

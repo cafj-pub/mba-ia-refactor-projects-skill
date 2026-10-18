@@ -26,6 +26,9 @@ class Settings:
         self.cors_origins = env.get('CORS_ORIGINS', '*')
         self.log_level = env.get('LOG_LEVEL', 'INFO').upper()
         self.api_version = '1.0'
+        self.token_max_age_seconds = int(env.get('TOKEN_MAX_AGE_SECONDS', '3600'))
+        # Senha do admin criado pelo seed.py; vazia = senha aleatória.
+        self.seed_admin_password = env.get('SEED_ADMIN_PASSWORD', '')
 
         # SMTP vazio = notificações por e-mail desabilitadas (apenas log).
         self.smtp_host = env.get('SMTP_HOST', '')

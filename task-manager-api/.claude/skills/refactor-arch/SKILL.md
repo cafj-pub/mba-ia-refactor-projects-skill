@@ -66,7 +66,8 @@ Em seguida, liste o inventário de endpoints em uma tabela curta.
 1. Leia `references/anti-patterns-catalog.md` e `references/report-template.md`.
 2. Percorra **todos** os arquivos-fonte, cruzando-os com **cada** anti-pattern do catálogo. Use os sinais de detecção (padrões de grep) do catálogo como ponto de partida, mas **confirme lendo o código** — sem falsos positivos.
 3. Agrupe ocorrências do mesmo anti-pattern no mesmo arquivo em um único finding (listando todas as linhas). O mesmo anti-pattern em arquivos diferentes pode virar findings separados quando a correção for diferente.
-4. Classifique cada finding pela severidade do catálogo (ajuste apenas com justificativa explícita). Inclua **sempre** a verificação de APIs deprecated (AP-18).
+4. Classifique cada finding pela severidade do catálogo (ajuste apenas com justificativa explícita). Inclua **sempre** a verificação de APIs deprecated (AP-18) e o inventário de **operações administrativas** (AP-12: deleção de contas, mudança de `role`/`active`, criação de conta privilegiada, reset, relatórios financeiros) com o status de proteção de cada uma.
+   - A recomendação de todo finding AP-04/AP-12 deve ser o mínimo seguro de T-06 completo, e a seção "Proposed Contract Changes" deve listar **cada** rota que passará a exigir credencial e qual (Bearer token, perfil admin, `X-Admin-Token`). Não use "como evolução" para operações administrativas.
 5. Ordene os findings: CRITICAL → HIGH → MEDIUM → LOW.
 6. Gere o relatório **exatamente** no formato de `report-template.md` e imprima-o.
 7. Se `$ARGUMENTS` contiver um caminho, salve o relatório (Markdown) nesse caminho.
@@ -91,9 +92,11 @@ Encerre sua resposta aqui e **aguarde** a resposta do usuário. Não inicie a Fa
    - Projeto parcialmente organizado → **reaproveitar** o que já está correto, mover responsabilidades para a camada certa e criar só o que falta (ex.: `controllers/`, `config/`, `middlewares/`).
    Imprima a árvore planejada antes de editar.
 4. **Execute** as transformações do playbook, na ordem: segurança (CRITICAL) → estrutura MVC → HIGH → MEDIUM → LOW. Para cada finding do relatório, aplique a transformação indicada (`T-xx`).
+   - **Findings AP-04/AP-12 nunca viram "recomendação"**: aplique sempre o *Mínimo seguro obrigatório* de T-06 — credencial verificada no servidor **e** todas as operações administrativas protegidas (401 sem credencial, 403 sem permissão, *fail-closed*). Assinar um token sem verificá-lo não fecha o finding. Só a autenticação de rotas não administrativas pode ficar em "Remaining Recommendations".
+   - Aplique o mesmo critério em todos os projetos: se um mecanismo de proteção foi usado num endpoint administrativo, ele deve cobrir **todos** os endpoints administrativos do inventário.
 5. **Atualize** artefatos de execução que dependam da estrutura: manifesto de dependências, scripts de start, README do projeto (como rodar e variáveis de ambiente), e crie `.env.example` com as variáveis necessárias (sem valores reais de segredos).
 6. **Remova** os arquivos antigos que foram completamente substituídos (não deixe código morto duplicado).
-7. **Valide** seguindo `validation.md`: imports/compilação, boot sem erros, smoke test de todos os endpoints do inventário comparado à baseline, e uma nova varredura dos anti-patterns CRITICAL/HIGH na nova base. Corrija e repita até passar.
+7. **Valide** seguindo `validation.md`: imports/compilação, boot sem erros, smoke test de todos os endpoints do inventário comparado à baseline, **testes negativos de autorização** em cada operação administrativa (§ Autorização) e uma nova varredura dos anti-patterns CRITICAL/HIGH na nova base. Corrija e repita até passar.
 8. Encerre os processos que você iniciou e remova arquivos temporários (ex.: bancos SQLite de teste criados pela validação).
 9. Imprima o resumo final:
 
@@ -113,6 +116,7 @@ PHASE 3: REFACTORING COMPLETE
 ## Validation
   ✓/✗ Application boots without errors
   ✓/✗ All endpoints respond correctly (<n>/<n> matched baseline)
+  ✓/✗ Administrative operations require credential (<n>/<n> negative tests: 401/403)
   ✓/✗ Zero CRITICAL/HIGH anti-patterns remaining
   ✓/✗ <outras checagens executadas>
 

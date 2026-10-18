@@ -1,3 +1,5 @@
+> **Nota (2026-10-17):** relatório da 1ª execução, mantido como histórico. A Fase 3 dessa execução só assinou o token e não fechou o finding #5 (autenticação). Depois que o T-06 da skill foi reforçado, a skill rodou de novo neste projeto e protegeu as operações administrativas — ver [audit-project-3-rerun.md](audit-project-3-rerun.md).
+
 ```
 ================================
 PHASE 1: PROJECT ANALYSIS
